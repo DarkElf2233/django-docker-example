@@ -1,0 +1,46 @@
+services:
+  django_app:
+    build:
+      context: myproject
+      target: builder
+    container_name: django_app
+    command: > 
+      sh -c "python manage.py makemigrations
+      && python manage.py migrate
+      && python manage.py collectstatic --no-input
+      && gunicorn myproject.wsgi:application --bind 0.0.0.0:8000"
+    volumes:
+      - static_volume:/home/app/web/staticfiles
+    env_file:
+      - ./.env.prod
+    depends_on:
+      pg_db:
+        condition: service_healthy
+        restart: true
+
+  pg_db:
+    image: postgres:latest
+    container_name: pg_db
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  proxy:
+    build: proxy
+    container_name: proxy
+    volumes:
+      - static_volume:/home/app/web/staticfiles
+    ports:
+      - 80:80
+    depends_on:
+      - django_app
+
+volumes:
+  db_data:
+  static_volume:
